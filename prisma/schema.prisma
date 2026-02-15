@@ -1,0 +1,119 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  name      String?
+  password  String
+  role      String   @default("admin") // admin or super-admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Election {
+  id               String              @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  description      String?
+  startTime        DateTime
+  endTime          DateTime
+  isActive         Boolean             @default(false)
+  isLive           Boolean             @default(false)
+  faceVerification Boolean             @default(false)
+  otpVerification  Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  candidates       ElectionCandidate[]
+  votes            Vote[]
+}
+
+model Category {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  name        String      @unique
+  displayName String
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  candidates  Candidate[]
+}
+
+model Candidate {
+  id           String              @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  party        String?
+  bio          String?
+  imageUrl     String
+  ballotNumber Int?
+  votes        Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  category     Category            @relation(fields: [categoryId], references: [id])
+  categoryId   String              @db.ObjectId
+  elections    ElectionCandidate[]
+  Vote         Vote[]
+}
+
+model ElectionCandidate {
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  electionId  String @db.ObjectId
+  candidateId String @db.ObjectId
+
+  // optional: references for easy query
+  election  Election?  @relation(fields: [electionId], references: [id])
+  candidate Candidate? @relation(fields: [candidateId], references: [id])
+
+  @@unique([electionId, candidateId])
+}
+
+model Voter {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String?
+  voterId     String   @unique
+  phoneNumber String?
+  email       String?
+  nidNumber   String?
+  imageUrl    String?
+  faceToken   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  votes       Vote[]
+  voterOtps   VoterOtp[]
+}
+
+model Vote {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  voter       Voter     @relation(fields: [voterId], references: [id])
+  voterId     String    @db.ObjectId
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  candidateId String    @db.ObjectId
+  election    Election  @relation(fields: [electionId], references: [id])
+  electionId  String    @db.ObjectId
+  categoryId  String
+  createdAt   DateTime  @default(now())
+
+  @@unique([voterId, electionId, categoryId])
+}
+
+model VoterOtp {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  voter         Voter    @relation(fields: [voterId], references: [id])
+  voterId       String   @db.ObjectId
+  otpCode       String
+  expiresAt     DateTime
+  attempts      Int      @default(0)
+  isVerified    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([voterId])
+  @@index([expiresAt])
+}
