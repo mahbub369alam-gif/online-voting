@@ -8,31 +8,31 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
   const radius = 105;
   const circumference = 2 * Math.PI * radius;
 
-  const timerRef = useRef(null);
+  const intervalRef = useRef(null);
   const startTimeRef = useRef(0);
-  const isHoldingRef = useRef(false);
+  const holdingRef = useRef(false);
   const firedRef = useRef(false);
 
-  const clearTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+  const clearTick = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   };
 
   const startHold = () => {
     if (completed) return;
+    if (holdingRef.current) return;
 
-    // prevent double start
-    if (isHoldingRef.current) return;
-
-    isHoldingRef.current = true;
+    holdingRef.current = true;
     firedRef.current = false;
     startTimeRef.current = Date.now();
+
+    // start from tiny progress so effect renders
     setProgress(1);
 
-    clearTimer();
-    timerRef.current = setInterval(() => {
+    clearTick();
+    intervalRef.current = setInterval(() => {
       const elapsed = Date.now() - startTimeRef.current;
       const next = Math.min(100, (elapsed / holdTime) * 100);
       setProgress(next);
@@ -40,25 +40,25 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
   };
 
   const stopHold = () => {
-    if (!isHoldingRef.current) return;
+    if (!holdingRef.current) return;
 
-    isHoldingRef.current = false;
-    clearTimer();
+    holdingRef.current = false;
+    clearTick();
 
     if (!completed) {
       setProgress(0);
     }
   };
 
-  // fire complete OUTSIDE of setState updater (safe)
+  // Fire complete safely (NOT inside setState updater)
   useEffect(() => {
     if (!completed && progress >= 100 && !firedRef.current) {
       firedRef.current = true;
       setCompleted(true);
-      clearTimer();
-      isHoldingRef.current = false;
+      holdingRef.current = false;
+      clearTick();
 
-      // call after state update tick (extra safe)
+      // call after state flush
       Promise.resolve().then(() => onHoldComplete?.());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,7 +66,7 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
 
   // cleanup
   useEffect(() => {
-    return () => clearTimer();
+    return () => clearTick();
   }, []);
 
   const strokeDashoffset = completed
@@ -77,8 +77,8 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
     <div className="flex flex-col items-center justify-center py-6">
       <div
         className="relative w-48 h-48 cursor-pointer select-none rounded-full border-2 border-purple-500"
-        style={{ touchAction: "none" }} // IMPORTANT for mobile hold
-        // Pointer events (best)
+        style={{ touchAction: "none" }} // IMPORTANT for mobile
+        // Pointer events (best for mobile + desktop)
         onPointerDown={(e) => {
           e.preventDefault();
           startHold();
@@ -95,7 +95,7 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
           e.preventDefault();
           stopHold();
         }}
-        // Fallback touch (older browsers)
+        // Fallback touch events (older iOS)
         onTouchStart={(e) => {
           e.preventDefault();
           startHold();
