@@ -18,7 +18,7 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  };
+  }; 
 
   const startHold = () => {
     if (completed) return;
