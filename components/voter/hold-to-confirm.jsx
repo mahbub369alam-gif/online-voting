@@ -1,34 +1,73 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function HoldToConfirm({ onHoldComplete, totalVotes }) {
   const [progress, setProgress] = useState(0);
   const [completed, setCompleted] = useState(false);
+
   const holdTime = 5000; // 5 seconds
   const radius = 105;
   const circumference = 2 * Math.PI * radius;
 
-  useEffect(() => {
-    let interval;
-    if (progress > 0 && progress < 100) {
-      const step = 100 / (holdTime / 100);
-      interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev + step >= 100) {
-            clearInterval(interval);
-            onHoldComplete();
-            setCompleted(true);
-            return 100;
-          }
-          return prev + step;
-        });
-      }, 100);
-    }
-    return () => clearInterval(interval);
-  }, [progress]);
+  const timerRef = useRef(null);
+  const startTimeRef = useRef(0);
+  const isHoldingRef = useRef(false);
+  const firedRef = useRef(false);
 
-  const handleMouseDown = () => setProgress(1);
-  const handleMouseUp = () => setProgress(0);
-  const handleMouseLeave = () => setProgress(0);
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startHold = () => {
+    if (completed) return;
+
+    // prevent double start
+    if (isHoldingRef.current) return;
+
+    isHoldingRef.current = true;
+    firedRef.current = false;
+    startTimeRef.current = Date.now();
+    setProgress(1);
+
+    clearTimer();
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTimeRef.current;
+      const next = Math.min(100, (elapsed / holdTime) * 100);
+      setProgress(next);
+    }, 50);
+  };
+
+  const stopHold = () => {
+    if (!isHoldingRef.current) return;
+
+    isHoldingRef.current = false;
+    clearTimer();
+
+    if (!completed) {
+      setProgress(0);
+    }
+  };
+
+  // fire complete OUTSIDE of setState updater (safe)
+  useEffect(() => {
+    if (!completed && progress >= 100 && !firedRef.current) {
+      firedRef.current = true;
+      setCompleted(true);
+      clearTimer();
+      isHoldingRef.current = false;
+
+      // call after state update tick (extra safe)
+      Promise.resolve().then(() => onHoldComplete?.());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, completed]);
+
+  // cleanup
+  useEffect(() => {
+    return () => clearTimer();
+  }, []);
 
   const strokeDashoffset = completed
     ? 0
@@ -38,16 +77,44 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
     <div className="flex flex-col items-center justify-center py-6">
       <div
         className="relative w-48 h-48 cursor-pointer select-none rounded-full border-2 border-purple-500"
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
+        style={{ touchAction: "none" }} // IMPORTANT for mobile hold
+        // Pointer events (best)
+        onPointerDown={(e) => {
+          e.preventDefault();
+          startHold();
+        }}
+        onPointerUp={(e) => {
+          e.preventDefault();
+          stopHold();
+        }}
+        onPointerCancel={(e) => {
+          e.preventDefault();
+          stopHold();
+        }}
+        onPointerLeave={(e) => {
+          e.preventDefault();
+          stopHold();
+        }}
+        // Fallback touch (older browsers)
+        onTouchStart={(e) => {
+          e.preventDefault();
+          startHold();
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          stopHold();
+        }}
+        onTouchCancel={(e) => {
+          e.preventDefault();
+          stopHold();
+        }}
       >
         {/* Circular progress border */}
         <svg
           className="transform -rotate-90"
           width="100%"
           height="100%"
-          viewBox="0 0 250 250"
+          viewBox="0 0 300 300"
         >
           <circle
             cx="125"
@@ -67,7 +134,7 @@ export function HoldToConfirm({ onHoldComplete, totalVotes }) {
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
-            style={{ transition: "stroke-dashoffset 0.1s linear" }}
+            style={{ transition: "stroke-dashoffset 0.05s linear" }}
           />
         </svg>
 
